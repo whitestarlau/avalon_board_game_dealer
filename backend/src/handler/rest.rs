@@ -64,9 +64,9 @@ pub async fn player_ready(
     State(app_state): State<AppState>,
     Query(query_params): Query<ReadyReq>,
 ) -> Result<axum::Json<ReadyResp>, (axum::http::StatusCode, String)> {
-    let number = query_params.number;
-    let mut map = app_state.player_role_map.write().await;
+    println!("player_ready query_params {:?}", query_params);
 
+    let number = query_params.number;
     {
         let mut set = app_state.player_ready_set.write().await;
         if set.contains(&number) {
@@ -76,19 +76,8 @@ pub async fn player_ready(
         }
     }
 
-    let mut map = app_state.player_role_map.write().await;
-    let values = map.values();
-    for value in values {
-        match value {
-            Role::Merlin => todo!(),
-            Role::Percival => todo!(),
-            Role::LS_of_Arthur(_) => todo!(),
-            Role::Morgana => todo!(),
-            Role::Assassin => todo!(),
-            Role::Oberon => todo!(),
-        }
-    }
-    // map.insert(number, v);
+    let gen_player_role_r = gen_player_role(number, &app_state).await;
+    println!("gen_player_role result: {:?}", gen_player_role_r);
 
     let resp = ReadyResp {
         number: query_params.number,
@@ -98,7 +87,10 @@ pub async fn player_ready(
     // return Err((StatusCode::INTERNAL_SERVER_ERROR, "aaa".to_string()));
 }
 
-async fn gen_player_role(num: i32, app_state: &AppState) {
+/**
+ * 生成用户的角色，并存放到hashMap中。
+ */
+async fn gen_player_role(num: i32, app_state: &AppState) -> Result<i32, String> {
     let mut map = app_state.player_role_map.write().await;
     let mut unassigned_role = app_state.unassigned_role.write().await;
 
@@ -115,9 +107,18 @@ async fn gen_player_role(num: i32, app_state: &AppState) {
 
     let random_role_opt = unassigned_role.get(index);
 
+    println!(
+        "gen_player_role random_role_opt {:?} {:?}",
+        index, random_role_opt
+    );
+
     if let Some(r) = random_role_opt {
         map.insert(num, r.clone());
         unassigned_role.remove(index);
+
+        return Ok(0);
+    } else {
+        return Err("failed random.".to_string());
     }
 }
 
@@ -125,6 +126,7 @@ pub async fn poll_player_role(
     State(app_state): State<AppState>,
     Query(query_params): Query<PollRoleReq>,
 ) -> Result<axum::Json<PollRoleResp>, (axum::http::StatusCode, String)> {
+    println!("poll_player_role query_params {:?}", query_params);
     let map: RwLockReadGuard<'_, HashMap<i32, Role>> = app_state.player_role_map.read().await;
     let ready_size = map.values().len();
     if ready_size < app_state.user_count {

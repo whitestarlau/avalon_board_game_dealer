@@ -17,7 +17,7 @@ use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 
 use crate::{
-    handler::rest::{health_handler, player_ready},
+    handler::rest::{health_handler, player_ready, poll_player_role},
     models::{role::Role, state::AppState},
 };
 
@@ -70,7 +70,7 @@ async fn web_server() {
     let rest = Router::new()
         .route(health_check_path, get(health_handler))
         .route("/ready", get(player_ready))
-        // .route("/poll_player_role", post(get_goods_detail))
+        .route("/poll_player_role", post(poll_player_role))
         .layer(CorsLayer::permissive())
         .with_state(app_state);
 
