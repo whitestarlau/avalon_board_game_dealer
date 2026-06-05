@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="阿瓦隆发牌服务器"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="32dp" />
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="服务器已停止"
+        android:textSize="18sp"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:id="@+id/urlText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="16sp"
+        android:textColorLink="#1976D2"
+        android:autoLink="web"
+        android:layout_marginBottom="24dp" />
+
+    <Button
+        android:id="@+id/toggleBtn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="启动服务器"
+        android:layout_marginBottom="32dp" />
+
+    <ImageView
+        android:id="@+id/qrImage"
+        android:layout_width="256dp"
+        android:layout_height="256dp"
+        android:layout_marginBottom="16dp"
+        android:contentDescription="QR Code" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="扫码连接，或在同一 Wi-Fi 下访问上方网址"
+        android:textSize="14sp"
+        android:gravity="center" />
+
+</LinearLayout>

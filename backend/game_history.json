@@ -1,0 +1,263 @@
+[
+  {
+    "id": 0,
+    "timestamp": "2026-06-05T17:03:45.158541+08:00",
+    "players": [
+      {
+        "number": 1,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 2,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 3,
+        "role": "梅林",
+        "faction": "good"
+      },
+      {
+        "number": 4,
+        "role": "莫甘娜",
+        "faction": "evil"
+      },
+      {
+        "number": 5,
+        "role": "派西维尔",
+        "faction": "good"
+      },
+      {
+        "number": 6,
+        "role": "奥伯伦",
+        "faction": "evil"
+      },
+      {
+        "number": 7,
+        "role": "刺客",
+        "faction": "evil"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "timestamp": "2026-06-05T17:19:39.772785+08:00",
+    "players": [
+      {
+        "number": 1,
+        "role": "莫甘娜",
+        "faction": "evil"
+      },
+      {
+        "number": 2,
+        "role": "派西维尔",
+        "faction": "good"
+      },
+      {
+        "number": 3,
+        "role": "梅林",
+        "faction": "good"
+      },
+      {
+        "number": 4,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 5,
+        "role": "奥伯伦",
+        "faction": "evil"
+      },
+      {
+        "number": 6,
+        "role": "刺客",
+        "faction": "evil"
+      },
+      {
+        "number": 7,
+        "role": "忠臣",
+        "faction": "good"
+      }
+    ]
+  },
+  {
+    "id": 0,
+    "timestamp": "2026-06-05T17:23:38.563657+08:00",
+    "players": [
+      {
+        "number": 1,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 2,
+        "role": "派西维尔",
+        "faction": "good"
+      },
+      {
+        "number": 3,
+        "role": "刺客",
+        "faction": "evil"
+      },
+      {
+        "number": 4,
+        "role": "梅林",
+        "faction": "good"
+      },
+      {
+        "number": 5,
+        "role": "莫甘娜",
+        "faction": "evil"
+      },
+      {
+        "number": 6,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 7,
+        "role": "奥伯伦",
+        "faction": "evil"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "timestamp": "2026-06-05T17:36:03.230378+08:00",
+    "players": [
+      {
+        "number": 1,
+        "role": "莫甘娜",
+        "faction": "evil"
+      },
+      {
+        "number": 2,
+        "role": "派西维尔",
+        "faction": "good"
+      },
+      {
+        "number": 3,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 4,
+        "role": "梅林",
+        "faction": "good"
+      },
+      {
+        "number": 5,
+        "role": "刺客",
+        "faction": "evil"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "timestamp": "2026-06-05T17:36:03.420144+08:00",
+    "players": [
+      {
+        "number": 1,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 2,
+        "role": "奥伯伦",
+        "faction": "evil"
+      },
+      {
+        "number": 3,
+        "role": "莫德雷德",
+        "faction": "evil"
+      },
+      {
+        "number": 4,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 5,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 6,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 7,
+        "role": "刺客",
+        "faction": "evil"
+      },
+      {
+        "number": 8,
+        "role": "派西维尔",
+        "faction": "good"
+      },
+      {
+        "number": 9,
+        "role": "莫甘娜",
+        "faction": "evil"
+      },
+      {
+        "number": 10,
+        "role": "梅林",
+        "faction": "good"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "timestamp": "2026-06-05T17:36:15.922585+08:00",
+    "players": [
+      {
+        "number": 1,
+        "role": "梅林",
+        "faction": "good"
+      },
+      {
+        "number": 2,
+        "role": "莫甘娜",
+        "faction": "evil"
+      },
+      {
+        "number": 3,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 4,
+        "role": "莫德雷德",
+        "faction": "evil"
+      },
+      {
+        "number": 5,
+        "role": "派西维尔",
+        "faction": "good"
+      },
+      {
+        "number": 6,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 7,
+        "role": "刺客",
+        "faction": "evil"
+      },
+      {
+        "number": 8,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 9,
+        "role": "忠臣",
+        "faction": "good"
+      }
+    ]
+  }
+]
