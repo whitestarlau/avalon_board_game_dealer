@@ -6,6 +6,7 @@ import HistoryTable from '../components/HistoryTable.vue'
 const currentGame = ref(null)
 const history = ref([])
 const loading = ref(true)
+const showCurrentGame = ref(false)
 
 const BASE_URL = window.location.origin
 
@@ -53,7 +54,12 @@ onMounted(async () => {
 
     <template v-else>
       <section class="current-game">
-        <h2>当前局</h2>
+        <div class="section-header">
+          <h2>当前局</h2>
+          <button class="toggle-btn" @click="showCurrentGame = !showCurrentGame">
+            {{ showCurrentGame ? '隐藏详情' : '显示详情' }}
+          </button>
+        </div>
         <div v-if="!currentGame || !currentGame.game_over" class="not-over">
           <p v-if="currentGame">
             游戏进行中，{{ currentGame.unready_numbers.length }} 名玩家未就绪：
@@ -61,7 +67,7 @@ onMounted(async () => {
           </p>
           <p v-else>无进行中的游戏</p>
         </div>
-        <div v-else class="game-result">
+        <div v-else-if="showCurrentGame" class="game-result">
           <h3>全员就绪！</h3>
           <div class="players">
             <PlayerSlot
@@ -70,6 +76,9 @@ onMounted(async () => {
               :player="player"
             />
           </div>
+        </div>
+        <div v-else class="game-result">
+          <p class="hidden-hint">所有人都已就绪，点击"显示详情"查看角色分配。</p>
         </div>
       </section>
 
@@ -106,6 +115,42 @@ section h2 {
   border-bottom: 2px solid var(--color-border);
   padding-bottom: 0.5rem;
   margin-bottom: 1rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--color-border);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.section-header h2 {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.toggle-btn {
+  padding: 0.4rem 1rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-background);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.toggle-btn:hover {
+  background: var(--color-background-mute);
+}
+
+.hidden-hint {
+  text-align: center;
+  padding: 1rem;
+  color: var(--color-text);
+  opacity: 0.6;
 }
 
 .not-over {
