@@ -120,12 +120,14 @@ onUnmounted(() => {
 
     <div v-else-if="!gameOver" class="waiting">
       <h2>等待其他玩家...</h2>
+      <p class="selection-info">你选择了 <strong>{{ selectedNumber }} 号</strong></p>
       <p>已就绪，请等待所有 {{ playerCount }} 名玩家准备</p>
       <div class="spinner"></div>
     </div>
 
     <div v-else class="result">
       <h2>你的角色</h2>
+      <p class="selection-info">你选择了 <strong>{{ selectedNumber }} 号</strong></p>
       <RoleCard v-if="roleData" :role="roleData" />
     </div>
 
@@ -212,6 +214,17 @@ onUnmounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.selection-info {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+  color: var(--color-text);
+  opacity: 0.9;
+}
+.selection-info strong {
+  color: #42b883;
+  font-size: 1.3rem;
 }
 
 .footer-links {
