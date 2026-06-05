@@ -43,3 +43,22 @@ cd backend && cargo run
 ## 部署
 
 将 `backend/` 目录部署到服务器，确保 `backend/static/` 目录存在（由 `cd frontend && npm run build` 生成），运行 `cargo run` 即可。
+
+## Android 部署
+
+将服务器运行在 Android 手机上：
+
+```bash
+# 1. 安装 Android NDK 和 Rust Android 目标
+rustup target add aarch64-linux-android
+cargo install cargo-ndk
+
+# 2. 构建
+export ANDROID_NDK_HOME=$HOME/Library/Android/sdk/ndk/<版本号>
+./build_android.sh
+
+# 3. APK 生成在 android/app/build/outputs/apk/debug/app-debug.apk
+cd android && ./gradlew assembleDebug
+```
+
+安装 APK 到手机，打开热点，点击"启动服务器"，朋友扫码连接即可。
