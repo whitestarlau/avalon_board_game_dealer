@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity() {
         NetworkInterface.getNetworkInterfaces()?.asSequence()
             ?.flatMap { it.inetAddresses.asSequence() }
             ?.find { !it.isLoopbackAddress && it is java.net.Inet4Address }
-            ?.let { return it.hostAddress }
+            ?.let { return it.hostAddress ?: "127.0.0.1" }
         return "127.0.0.1"
     }
 
