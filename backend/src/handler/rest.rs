@@ -116,10 +116,17 @@ pub async fn player_ready(
 async fn gen_player_role(num: i32, app_state: &AppState) -> Result<i32, String> {
     let mut map = app_state.player_role_map.write().await;
     let mut unassigned_role = app_state.unassigned_role.write().await;
+    let history = app_state.history_role_map.read().await;
 
     if unassigned_role.is_empty() {
         return Err("no roles left to assign".to_string());
     }
+
+    // Check if player had a role in the last game for future weighted selection
+    let _last_faction: Option<&str> = history
+        .last()
+        .and_then(|last_map| last_map.get(&num))
+        .map(|r| r.faction());
 
     let mut rng = rand::thread_rng();
     let index = rng.gen_range(0..unassigned_role.len());
