@@ -56,14 +56,14 @@ pub struct CurrentGameResp {
     pub unready_numbers: Vec<i32>,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PlayerInfo {
     pub number: i32,
     pub role: String,
     pub faction: String,
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HistoryEntry {
     pub id: i32,
     pub timestamp: String,

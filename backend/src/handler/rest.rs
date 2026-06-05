@@ -7,13 +7,12 @@ use axum::{
     Json,
 };
 use rand::Rng;
-use tokio::sync::RwLockReadGuard;
 
 use crate::models::{
     role::Role,
     state::{
-        AppState, CurrentGameResp, HistoryResp, NewGameResp, PollRoleReq, PollRoleResp, ReadyReq,
-        ReadyResp,
+        AppState, CurrentGameResp, HistoryEntry, HistoryResp, NewGameResp, PlayerInfo,
+        PollRoleReq, PollRoleResp, ReadyReq, ReadyResp,
     },
 };
 
@@ -24,240 +23,284 @@ pub async fn health_handler() -> Html<&'static str> {
 
 pub async fn new_game(
     State(app_state): State<AppState>,
-) -> Result<axum::Json<NewGameResp>, (axum::http::StatusCode, String)> {
-    let _set = app_state.player_ready_set.write().await;
-    let mut map = app_state.player_role_map.write().await;
-    let mut unassigned_role = app_state.unassigned_role.write().await;
+) -> Result<Json<NewGameResp>, (StatusCode, String)> {
+    let mut ready_set = app_state.player_ready_set.write().await;
+    let mut role_map = app_state.player_role_map.write().await;
+    let mut unassigned = app_state.unassigned_role.write().await;
+    let mut history = app_state.history_role_map.write().await;
+    let mut counter = app_state.game_counter.write().await;
 
-    if app_state.user_count == 7 {
-        unassigned_role.clear();
-        unassigned_role.push(Role::Merlin);
-        unassigned_role.push(Role::Percival);
-        unassigned_role.push(Role::LoyalServant(1));
-        unassigned_role.push(Role::LoyalServant(2));
-        unassigned_role.push(Role::Morgana);
-        unassigned_role.push(Role::Assassin);
-        unassigned_role.push(Role::Oberon);
-
-        map.clear()
-    } else {
-        //暂不支持
+    // Save current game to history if any players have roles
+    if !role_map.is_empty() {
+        history.push(role_map.clone());
     }
 
-    return Ok(axum::Json(NewGameResp {
-        des: "".to_string(),
-    }));
+    // Reset state
+    ready_set.clear();
+    role_map.clear();
+    unassigned.clear();
+    unassigned.extend(vec![
+        Role::Merlin,
+        Role::Percival,
+        Role::LoyalServant(1),
+        Role::LoyalServant(2),
+        Role::Morgana,
+        Role::Assassin,
+        Role::Oberon,
+    ]);
+    *counter += 1;
+
+    Ok(Json(NewGameResp {
+        des: "ok".to_string(),
+    }))
 }
 
-/**
- * 在Ready的一刻就计算好当前玩家的角色，但是我们要等到所有玩家都准备好之后才会放出对应的结果。
- */
 pub async fn player_ready(
     State(app_state): State<AppState>,
     Query(query_params): Query<ReadyReq>,
-) -> Result<axum::Json<ReadyResp>, (axum::http::StatusCode, String)> {
-    println!("player_ready query_params {:?}", query_params);
-
+) -> Result<Json<ReadyResp>, (StatusCode, String)> {
     let number = query_params.number;
+
+    if number < 1 || number > 7 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "number must be between 1 and 7".to_string(),
+        ));
+    }
+
+    let ready_set = app_state.player_ready_set.read().await;
+    if ready_set.contains(&number) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("player {} already ready", number),
+        ));
+    }
+    drop(ready_set);
+
+    // Check if game is already over
     {
-        let mut set = app_state.player_ready_set.write().await;
-        if set.contains(&number) {
-            //重新分配
-        } else {
-            set.insert(query_params.number);
+        let map = app_state.player_role_map.read().await;
+        if map.len() >= app_state.user_count {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "game already over, start a new game".to_string(),
+            ));
         }
     }
 
-    let gen_player_role_r = gen_player_role(number, &app_state).await;
-    println!("gen_player_role result: {:?}", gen_player_role_r);
+    // Mark as ready
+    {
+        let mut set = app_state.player_ready_set.write().await;
+        set.insert(number);
+    }
 
-    let resp = ReadyResp {
-        number: query_params.number,
+    gen_player_role(number, &app_state).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // Check if all players are ready — if so, auto-save to history
+    {
+        let map = app_state.player_role_map.read().await;
+        if map.len() == app_state.user_count {
+            let counter = *app_state.game_counter.read().await;
+            let history = app_state.history_role_map.read().await;
+            save_game_to_history(&map, counter, &history).await;
+        }
+    }
+
+    Ok(Json(ReadyResp {
+        number,
         ready: true,
-    };
-
-    return Ok(axum::Json(resp));
-    // return Err((StatusCode::INTERNAL_SERVER_ERROR, "aaa".to_string()));
+    }))
 }
 
-/**
- * 生成用户的角色，并存放到hashMap中。
- */
 async fn gen_player_role(num: i32, app_state: &AppState) -> Result<i32, String> {
     let mut map = app_state.player_role_map.write().await;
     let mut unassigned_role = app_state.unassigned_role.write().await;
 
-    let mut rng = rand::thread_rng();
-
-    //TODO 使用伪随机权重，上局游戏打过的角色或者阵营，这一把将降低概率。如果连续两把随机到同一个阵营，将大幅度降低其概率。
-    // let weights = [2, 10, 1]; // 这里的权重值越大，对应的元素被选中的概率就越高
-    // let dist = WeightedIndex::new(&weights).unwrap();
-    // let random_index = dist.sample(&mut rng);
-    // let random_enum = unassigned_role.get(random_index);
-
-    let len = unassigned_role.len();
-    let index = rng.gen_range(0..len);
-
-    let random_role_opt = unassigned_role.get(index);
-
-    println!(
-        "gen_player_role random_role_opt {:?} {:?}",
-        index, random_role_opt
-    );
-
-    if let Some(r) = random_role_opt {
-        map.insert(num, r.clone());
-        unassigned_role.remove(index);
-
-        return Ok(0);
-    } else {
-        return Err("failed random.".to_string());
+    if unassigned_role.is_empty() {
+        return Err("no roles left to assign".to_string());
     }
+
+    let mut rng = rand::thread_rng();
+    let index = rng.gen_range(0..unassigned_role.len());
+    let role = unassigned_role.remove(index);
+    map.insert(num, role.clone());
+
+    Ok(0)
 }
 
 pub async fn poll_player_role(
     State(app_state): State<AppState>,
     Query(query_params): Query<PollRoleReq>,
-) -> Result<axum::Json<PollRoleResp>, (axum::http::StatusCode, String)> {
-    println!("poll_player_role query_params {:?}", query_params);
-    let map: RwLockReadGuard<'_, HashMap<i32, Role>> = app_state.player_role_map.read().await;
-    let ready_size = map.values().len();
+) -> Result<Json<PollRoleResp>, (StatusCode, String)> {
+    let map = app_state.player_role_map.read().await;
+    let ready_size = map.len();
+
     if ready_size < app_state.user_count {
-        //还有玩家没准备，不返回结果。
-        let error = (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "some body dont ready".to_string(),
-        );
-        return Err(error);
-    } else {
-        let role_opt = map.get(&query_params.number);
-        if let Some(role) = role_opt {
-            //
-            let resp = build_poll_role_resp(role, &app_state).await;
-            return Ok(axum::Json(resp));
-        } else {
-            //不应该出现这种情况
-            let error = (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "your number is not ready".to_string(),
-            );
-            return Err(error);
-        }
+        return Ok(Json(PollRoleResp {
+            ready: false,
+            role: String::new(),
+            role_des: String::new(),
+            skill_des: String::new(),
+        }));
     }
+
+    let role = map.get(&query_params.number)
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "player not found".to_string()))?;
+
+    let resp = build_poll_role_resp(role, &app_state).await;
+    Ok(Json(resp))
 }
 
-/**
- * 构建轮训的返回
- */
 async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
     let map = state.player_role_map.read().await;
 
-    let resp = match role {
+    let (role_name, skill_des) = match role {
         Role::Merlin => {
-            //找到所有的邪恶方玩家，提供给ta
-            let mut h_roles: Vec<i32> = Vec::new();
-            let mut skill_des = "邪恶方玩家有： ".to_string();
-            for (num, p_role) in map.clone().into_iter() {
+            let mut des = "邪恶方玩家有： ".to_string();
+            for (num, p_role) in map.iter() {
                 match p_role {
                     Role::Morgana | Role::Assassin | Role::Oberon => {
-                        skill_des = format!("{} {}号", skill_des, num);
-                        h_roles.push(num)
+                        des = format!("{} {}号", des, num);
                     }
                     _ => {}
                 }
             }
-            PollRoleResp {
-                ready: true,
-                role: "Merlin".to_string(),
-                role_des: "你是梅林，是正义方的首领，知晓邪恶方的号码。注意，请不要暴露自己。"
-                    .to_string(),
-                skill_des: skill_des,
-            }
+            ("梅林".to_string(), des)
         }
         Role::Percival => {
-            //找到梅林和莫甘娜提供给ta
-            let mut h_roles: Vec<i32> = Vec::new();
-            let mut skill_des = "梅林和莫甘娜是：".to_string();
-            for (num, p_role) in map.clone().into_iter() {
+            let mut des = "梅林和莫甘娜是：".to_string();
+            for (num, p_role) in map.iter() {
                 match p_role {
                     Role::Morgana | Role::Merlin => {
-                        skill_des = format!("{} {}号", skill_des, num);
-                        h_roles.push(num)
+                        des = format!("{} {}号", des, num);
                     }
                     _ => {}
                 }
             }
-            PollRoleResp {
-                ready: true,
-                role: "Percival".to_string(),
-                role_des: "你是派。".to_string(),
-                skill_des: skill_des,
-            }
+            ("派西维尔".to_string(), des)
         }
-        Role::LoyalServant(_) => PollRoleResp {
-            ready: true,
-            role: "LoyalServant".to_string(),
-            role_des: "你是亚瑟的忠臣。".to_string(),
-            skill_des: "".to_string(),
-        },
+        Role::LoyalServant(_) => {
+            ("忠臣".to_string(), String::new())
+        }
         Role::Morgana => {
-            let mut skill_des = "刺客是：".to_string();
-            for (num, p_role) in map.clone().into_iter() {
-                match p_role {
-                    Role::Assassin => {
-                        skill_des = format!("{} {}号", skill_des, num);
-                    }
-                    _ => {}
+            let mut des = "刺客是：".to_string();
+            for (num, p_role) in map.iter() {
+                if matches!(p_role, Role::Assassin) {
+                    des = format!("{} {}号", des, num);
                 }
             }
-            PollRoleResp {
-                ready: true,
-                role: "Morgana".to_string(),
-                role_des: "你是莫甘娜。".to_string(),
-                skill_des: skill_des.to_string(),
-            }
+            ("莫甘娜".to_string(), des)
         }
         Role::Assassin => {
-            let mut skill_des = "莫甘娜是：".to_string();
-            for (num, p_role) in map.clone().into_iter() {
-                match p_role {
-                    Role::Morgana => {
-                        skill_des = format!("{} {}号", skill_des, num);
-                    }
-                    _ => {}
+            let mut des = "莫甘娜是：".to_string();
+            for (num, p_role) in map.iter() {
+                if matches!(p_role, Role::Morgana) {
+                    des = format!("{} {}号", des, num);
                 }
             }
-            PollRoleResp {
-                ready: true,
-                role: "Assassin".to_string(),
-                role_des: "你是刺客。".to_string(),
-                skill_des: skill_des.to_string(),
-            }
+            ("刺客".to_string(), des)
         }
-        Role::Oberon => PollRoleResp {
-            ready: true,
-            role: "Oberon".to_string(),
-            role_des: "你是奥伯伦".to_string(),
-            skill_des: "".to_string(),
-        },
+        Role::Oberon => {
+            ("奥伯伦".to_string(), String::new())
+        }
     };
 
-    return resp;
+    PollRoleResp {
+        ready: true,
+        role: role_name,
+        role_des: role.description().to_string(),
+        skill_des,
+    }
 }
 
-#[allow(dead_code)]
-pub fn map_ok_result<T>(r: T) -> axum::Json<T> {
-    axum::Json(r)
+async fn save_game_to_history(
+    role_map: &HashMap<i32, Role>,
+    game_id: i32,
+    _history: &Vec<HashMap<i32, Role>>,
+) {
+    let mut players: Vec<PlayerInfo> = Vec::new();
+    let mut sorted_numbers: Vec<i32> = role_map.keys().cloned().collect();
+    sorted_numbers.sort();
+
+    for num in sorted_numbers {
+        let role = &role_map[&num];
+        players.push(PlayerInfo {
+            number: num,
+            role: role.name_cn().to_string(),
+            faction: role.faction().to_string(),
+        });
+    }
+
+    let entry = HistoryEntry {
+        id: game_id,
+        timestamp: chrono::Local::now().to_rfc3339(),
+        players,
+    };
+
+    // Read existing history from file, append, write back
+    let path = std::path::Path::new("game_history.json");
+    let mut history: Vec<HistoryEntry> = if path.exists() {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    history.push(entry);
+
+    if let Ok(json) = serde_json::to_string_pretty(&history) {
+        let _ = std::fs::write(path, json);
+    }
 }
 
 pub async fn admin_current_game(
-    State(_app_state): State<AppState>,
+    State(app_state): State<AppState>,
 ) -> Result<Json<CurrentGameResp>, (StatusCode, String)> {
-    unimplemented!()
+    let map = app_state.player_role_map.read().await;
+    let ready_set = app_state.player_ready_set.read().await;
+
+    let game_over = map.len() == app_state.user_count;
+
+    let mut players: Vec<PlayerInfo> = Vec::new();
+    let mut sorted_numbers: Vec<i32> = map.keys().cloned().collect();
+    sorted_numbers.sort();
+
+    for num in sorted_numbers {
+        let role = &map[&num];
+        players.push(PlayerInfo {
+            number: num,
+            role: role.name_cn().to_string(),
+            faction: role.faction().to_string(),
+        });
+    }
+
+    let all_numbers: Vec<i32> = (1..=app_state.user_count as i32).collect();
+    let unready: Vec<i32> = all_numbers.into_iter()
+        .filter(|n| !ready_set.contains(n))
+        .collect();
+
+    Ok(Json(CurrentGameResp {
+        game_over,
+        players,
+        unready_numbers: unready,
+    }))
 }
 
 pub async fn admin_history(
     State(_app_state): State<AppState>,
 ) -> Result<Json<HistoryResp>, (StatusCode, String)> {
-    unimplemented!()
+    let path = std::path::Path::new("game_history.json");
+    let games: Vec<HistoryEntry> = if path.exists() {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    Ok(Json(HistoryResp { games }))
 }
