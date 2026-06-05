@@ -21,14 +21,17 @@ async function ready() {
     })
     if (!res.ok) {
       const text = await res.text()
-      alert(text)
       waiting.value = false
+      if (text.includes('already ready') || text.includes('game already over')) {
+        isReady.value = true
+        startPolling()
+        return
+      }
       return
     }
     isReady.value = true
     startPolling()
   } catch (e) {
-    alert('Connection failed')
     waiting.value = false
   }
 }
