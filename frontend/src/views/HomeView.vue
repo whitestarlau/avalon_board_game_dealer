@@ -2,6 +2,8 @@
 import { ref, onUnmounted } from 'vue'
 import RoleCard from '../components/RoleCard.vue'
 
+const playerCount = ref(7)
+const gameStarted = ref(false)
 const selectedNumber = ref(null)
 const isReady = ref(false)
 const waiting = ref(false)
@@ -10,6 +12,18 @@ const roleData = ref(null)
 let pollTimer = null
 
 const BASE_URL = window.location.origin
+
+async function startGame() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/new_game?count=${playerCount.value}`, {
+      method: 'POST',
+    })
+    if (!res.ok) return
+    gameStarted.value = true
+  } catch (e) {
+    // ignore
+  }
+}
 
 async function ready() {
   if (!selectedNumber.value) return
@@ -70,11 +84,26 @@ onUnmounted(() => {
   <div class="home">
     <h1>阿瓦隆发牌工具</h1>
 
-    <div v-if="!isReady" class="setup">
-      <h2>选择你的玩家编号</h2>
+    <div v-if="!gameStarted" class="setup">
+      <h2>选择玩家人数</h2>
+      <div class="count-grid">
+        <button
+          v-for="n in [5, 6, 7, 8, 9, 10]"
+          :key="n"
+          :class="['count-btn', { selected: playerCount === n }]"
+          @click="playerCount = n"
+        >
+          {{ n }} 人
+        </button>
+      </div>
+      <button class="start-btn" @click="startGame">开始游戏</button>
+    </div>
+
+    <div v-else-if="!isReady" class="setup">
+      <h2>选择你的玩家编号（共 {{ playerCount }} 人）</h2>
       <div class="number-grid">
         <button
-          v-for="n in 7"
+          v-for="n in playerCount"
           :key="n"
           :class="['num-btn', { selected: selectedNumber === n }]"
           @click="selectedNumber = n"
@@ -93,7 +122,7 @@ onUnmounted(() => {
 
     <div v-else-if="!gameOver" class="waiting">
       <h2>等待其他玩家...</h2>
-      <p>已就绪，请等待所有 7 名玩家准备</p>
+      <p>已就绪，请等待所有 {{ playerCount }} 名玩家准备</p>
       <div class="spinner"></div>
     </div>
 
@@ -153,6 +182,49 @@ onUnmounted(() => {
   border: none;
   border-radius: 8px;
   background: #42b883;
+  color: white;
+  cursor: pointer;
+}
+
+.count-grid {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+.count-btn {
+  width: 80px;
+  height: 80px;
+  font-size: 1.2rem;
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--color-background);
+  color: var(--color-text);
+  transition: all 0.2s;
+}
+
+.count-btn:hover {
+  border-color: var(--color-heading);
+  transform: scale(1.05);
+}
+
+.count-btn.selected {
+  border-color: #e67e22;
+  background: #e67e22;
+  color: white;
+}
+
+.start-btn {
+  display: block;
+  margin: 2rem auto;
+  padding: 1rem 3rem;
+  font-size: 1.3rem;
+  border: none;
+  border-radius: 8px;
+  background: #e67e22;
   color: white;
   cursor: pointer;
 }

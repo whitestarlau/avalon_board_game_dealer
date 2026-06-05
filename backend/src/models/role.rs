@@ -6,14 +6,15 @@ pub enum Role {
     Morgana,
     Assassin,
     Oberon,
+    Mordred,
+    MinionOfMordred(i32),
 }
 
-#[allow(dead_code)]
 impl Role {
     pub fn faction(&self) -> &str {
         match self {
             Role::Merlin | Role::Percival | Role::LoyalServant(_) => "good",
-            Role::Morgana | Role::Assassin | Role::Oberon => "evil",
+            Role::Morgana | Role::Assassin | Role::Oberon | Role::Mordred | Role::MinionOfMordred(_) => "evil",
         }
     }
 
@@ -25,6 +26,8 @@ impl Role {
             Role::Morgana => "莫甘娜",
             Role::Assassin => "刺客",
             Role::Oberon => "奥伯伦",
+            Role::Mordred => "莫德雷德",
+            Role::MinionOfMordred(_) => "爪牙",
         }
     }
 
@@ -36,6 +39,79 @@ impl Role {
             Role::Morgana => "你是莫甘娜。",
             Role::Assassin => "你是刺客。",
             Role::Oberon => "你是奥伯伦，邪恶方闭眼玩家，不与其他邪恶玩家互知。",
+            Role::Mordred => "你是莫德雷德，梅林无法看到你。",
+            Role::MinionOfMordred(_) => "你是莫德雷德的爪牙。",
+        }
+    }
+
+    pub fn role_pool(count: usize) -> Vec<Role> {
+        match count {
+            5 => vec![
+                Role::Merlin,
+                Role::Percival,
+                Role::LoyalServant(1),
+                Role::Morgana,
+                Role::Assassin,
+            ],
+            6 => vec![
+                Role::Merlin,
+                Role::Percival,
+                Role::LoyalServant(1),
+                Role::LoyalServant(2),
+                Role::Morgana,
+                Role::Assassin,
+            ],
+            7 => vec![
+                Role::Merlin,
+                Role::Percival,
+                Role::LoyalServant(1),
+                Role::LoyalServant(2),
+                Role::Morgana,
+                Role::Oberon,
+                Role::Assassin,
+            ],
+            8 => vec![
+                Role::Merlin,
+                Role::Percival,
+                Role::LoyalServant(1),
+                Role::LoyalServant(2),
+                Role::LoyalServant(3),
+                Role::Morgana,
+                Role::Assassin,
+                Role::MinionOfMordred(1),
+            ],
+            9 => vec![
+                Role::Merlin,
+                Role::Percival,
+                Role::LoyalServant(1),
+                Role::LoyalServant(2),
+                Role::LoyalServant(3),
+                Role::LoyalServant(4),
+                Role::Mordred,
+                Role::Morgana,
+                Role::Assassin,
+            ],
+            10 => vec![
+                Role::Merlin,
+                Role::Percival,
+                Role::LoyalServant(1),
+                Role::LoyalServant(2),
+                Role::LoyalServant(3),
+                Role::LoyalServant(4),
+                Role::Mordred,
+                Role::Morgana,
+                Role::Oberon,
+                Role::Assassin,
+            ],
+            _ => vec![
+                Role::Merlin,
+                Role::Percival,
+                Role::LoyalServant(1),
+                Role::LoyalServant(2),
+                Role::Morgana,
+                Role::Oberon,
+                Role::Assassin,
+            ],
         }
     }
 }

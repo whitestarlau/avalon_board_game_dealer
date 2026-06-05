@@ -10,7 +10,7 @@ use super::role::Role;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
-    pub user_count: usize,
+    pub user_count: Arc<RwLock<usize>>,
     pub player_role_map: Arc<RwLock<HashMap<i32, Role>>>,
     pub player_ready_set: Arc<RwLock<HashSet<i32>>>,
     pub unassigned_role: Arc<RwLock<Vec<Role>>>,
@@ -18,6 +18,11 @@ pub struct AppState {
     pub history_role_map: Arc<RwLock<Vec<HashMap<i32, Role>>>>,
     #[allow(dead_code)]
     pub game_counter: Arc<RwLock<i32>>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct NewGameReq {
+    pub count: usize,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -52,6 +57,7 @@ pub struct PollRoleResp {
 #[derive(Serialize, Debug, Clone)]
 pub struct CurrentGameResp {
     pub game_over: bool,
+    pub player_count: usize,
     pub players: Vec<PlayerInfo>,
     pub unready_numbers: Vec<i32>,
 }

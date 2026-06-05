@@ -29,15 +29,17 @@ async function fetchHistory() {
   }
 }
 
-async function newGame() {
-  if (!confirm('确定开始新一局？当前还未就绪的玩家信息将丢失。')) return
-  try {
-    await fetch(`${BASE_URL}/api/new_game`, { method: 'POST' })
-    currentGame.value = null
-    await fetchHistory()
-  } catch (e) {
-    console.error('Failed to start new game', e)
-  }
+function newGame() {
+  const count = prompt('选择玩家人数（5-10）：', currentGame.value?.player_count?.toString() || '7')
+  const num = parseInt(count)
+  if (isNaN(num) || num < 5 || num > 10) return
+  if (!confirm(`确定开始 ${num} 人新一局？`)) return
+  fetch(`${BASE_URL}/api/new_game?count=${num}`, { method: 'POST' })
+    .then(() => {
+      currentGame.value = null
+      return fetchHistory()
+    })
+    .catch(e => console.error('Failed to start new game', e))
 }
 
 onMounted(async () => {

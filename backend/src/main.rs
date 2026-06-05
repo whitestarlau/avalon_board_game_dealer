@@ -30,21 +30,13 @@ fn main() {
 }
 
 async fn web_server() {
-    let user_count: usize = 7;
+    let user_count: Arc<RwLock<usize>> = Arc::new(RwLock::new(0));
 
     let play_role_map: Arc<RwLock<HashMap<i32, Role>>> = Arc::new(RwLock::new(HashMap::new()));
     let ready_player_set: Arc<RwLock<HashSet<i32>>> = Arc::new(RwLock::new(HashSet::new()));
     let history_player_role: Arc<RwLock<Vec<HashMap<i32, Role>>>> =
         Arc::new(RwLock::new(Vec::new()));
-    let unassigned_role: Arc<RwLock<Vec<Role>>> = Arc::new(RwLock::new(vec![
-        Role::Merlin,
-        Role::Percival,
-        Role::LoyalServant(1),
-        Role::LoyalServant(2),
-        Role::Morgana,
-        Role::Assassin,
-        Role::Oberon,
-    ]));
+    let unassigned_role: Arc<RwLock<Vec<Role>>> = Arc::new(RwLock::new(Vec::new()));
     let game_counter: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
 
     let app_state = AppState {

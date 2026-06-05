@@ -11,8 +11,8 @@ use rand::Rng;
 use crate::models::{
     role::Role,
     state::{
-        AppState, CurrentGameResp, HistoryEntry, HistoryResp, NewGameResp, PlayerInfo,
-        PollRoleReq, PollRoleResp, ReadyReq, ReadyResp,
+        AppState, CurrentGameResp, HistoryEntry, HistoryResp, NewGameReq, NewGameResp,
+        PlayerInfo, PollRoleReq, PollRoleResp, ReadyReq, ReadyResp,
     },
 };
 
@@ -23,6 +23,7 @@ pub async fn health_handler() -> Html<&'static str> {
 
 pub async fn new_game(
     State(app_state): State<AppState>,
+    Query(query_params): Query<NewGameReq>,
 ) -> Result<Json<NewGameResp>, (StatusCode, String)> {
     let mut ready_set = app_state.player_ready_set.write().await;
     let mut role_map = app_state.player_role_map.write().await;
@@ -35,23 +36,19 @@ pub async fn new_game(
         history.push(role_map.clone());
     }
 
+    let count = query_params.count.max(5).min(10);
+
     // Reset state
     ready_set.clear();
     role_map.clear();
     unassigned.clear();
-    unassigned.extend(vec![
-        Role::Merlin,
-        Role::Percival,
-        Role::LoyalServant(1),
-        Role::LoyalServant(2),
-        Role::Morgana,
-        Role::Assassin,
-        Role::Oberon,
-    ]);
+    unassigned.extend(Role::role_pool(count));
+    *app_state.user_count.write().await = count;
+
     *counter += 1;
 
     Ok(Json(NewGameResp {
-        des: "ok".to_string(),
+        des: format!("new game with {} players", count),
     }))
 }
 
@@ -61,10 +58,18 @@ pub async fn player_ready(
 ) -> Result<Json<ReadyResp>, (StatusCode, String)> {
     let number = query_params.number;
 
-    if number < 1 || number > 7 {
+    let user_count = *app_state.user_count.read().await;
+    if user_count == 0 {
         return Err((
             StatusCode::BAD_REQUEST,
-            "number must be between 1 and 7".to_string(),
+            "game not started, create a new game first".to_string(),
+        ));
+    }
+
+    if number < 1 || number > user_count as i32 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("number must be between 1 and {}", user_count),
         ));
     }
 
@@ -80,7 +85,7 @@ pub async fn player_ready(
     // Check if game is already over
     {
         let map = app_state.player_role_map.read().await;
-        if map.len() >= app_state.user_count {
+        if map.len() >= user_count {
             return Err((
                 StatusCode::BAD_REQUEST,
                 "game already over, start a new game".to_string(),
@@ -100,7 +105,7 @@ pub async fn player_ready(
     // Check if all players are ready — if so, auto-save to history
     {
         let map = app_state.player_role_map.read().await;
-        if map.len() == app_state.user_count {
+        if map.len() == *app_state.user_count.read().await {
             let counter = *app_state.game_counter.read().await;
             let history = app_state.history_role_map.read().await;
             save_game_to_history(&map, counter, &history).await;
@@ -140,10 +145,11 @@ pub async fn poll_player_role(
     State(app_state): State<AppState>,
     Query(query_params): Query<PollRoleReq>,
 ) -> Result<Json<PollRoleResp>, (StatusCode, String)> {
+    let user_count = *app_state.user_count.read().await;
     let map = app_state.player_role_map.read().await;
     let ready_size = map.len();
 
-    if ready_size < app_state.user_count {
+    if ready_size < user_count {
         return Ok(Json(PollRoleResp {
             ready: false,
             role: String::new(),
@@ -167,7 +173,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
             let mut des = "邪恶方玩家有： ".to_string();
             for (num, p_role) in map.iter() {
                 match p_role {
-                    Role::Morgana | Role::Assassin | Role::Oberon => {
+                    Role::Morgana | Role::Assassin | Role::Oberon | Role::MinionOfMordred(_) => {
                         des = format!("{} {}号", des, num);
                     }
                     _ => {}
@@ -191,25 +197,55 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
             ("忠臣".to_string(), String::new())
         }
         Role::Morgana => {
-            let mut des = "刺客是：".to_string();
+            let mut des = "邪恶同伴是：".to_string();
             for (num, p_role) in map.iter() {
-                if matches!(p_role, Role::Assassin) {
-                    des = format!("{} {}号", des, num);
+                match p_role {
+                    Role::Assassin | Role::Mordred | Role::MinionOfMordred(_) => {
+                        des = format!("{} {}号", des, num);
+                    }
+                    _ => {}
                 }
             }
             ("莫甘娜".to_string(), des)
         }
         Role::Assassin => {
-            let mut des = "莫甘娜是：".to_string();
+            let mut des = "邪恶同伴是：".to_string();
             for (num, p_role) in map.iter() {
-                if matches!(p_role, Role::Morgana) {
-                    des = format!("{} {}号", des, num);
+                match p_role {
+                    Role::Morgana | Role::Mordred | Role::MinionOfMordred(_) => {
+                        des = format!("{} {}号", des, num);
+                    }
+                    _ => {}
                 }
             }
             ("刺客".to_string(), des)
         }
         Role::Oberon => {
             ("奥伯伦".to_string(), String::new())
+        }
+        Role::Mordred => {
+            let mut des = "邪恶同伴是：".to_string();
+            for (num, p_role) in map.iter() {
+                match p_role {
+                    Role::Morgana | Role::Assassin | Role::MinionOfMordred(_) => {
+                        des = format!("{} {}号", des, num);
+                    }
+                    _ => {}
+                }
+            }
+            ("莫德雷德".to_string(), des)
+        }
+        Role::MinionOfMordred(_) => {
+            let mut des = "邪恶同伴是：".to_string();
+            for (num, p_role) in map.iter() {
+                match p_role {
+                    Role::Morgana | Role::Assassin | Role::Mordred => {
+                        des = format!("{} {}号", des, num);
+                    }
+                    _ => {}
+                }
+            }
+            ("爪牙".to_string(), des)
         }
     };
 
@@ -266,10 +302,11 @@ async fn save_game_to_history(
 pub async fn admin_current_game(
     State(app_state): State<AppState>,
 ) -> Result<Json<CurrentGameResp>, (StatusCode, String)> {
+    let user_count = *app_state.user_count.read().await;
     let map = app_state.player_role_map.read().await;
     let ready_set = app_state.player_ready_set.read().await;
 
-    let game_over = map.len() == app_state.user_count;
+    let game_over = map.len() == user_count;
 
     let mut players: Vec<PlayerInfo> = Vec::new();
     let mut sorted_numbers: Vec<i32> = map.keys().cloned().collect();
@@ -284,13 +321,14 @@ pub async fn admin_current_game(
         });
     }
 
-    let all_numbers: Vec<i32> = (1..=app_state.user_count as i32).collect();
+    let all_numbers: Vec<i32> = (1..=user_count as i32).collect();
     let unready: Vec<i32> = all_numbers.into_iter()
         .filter(|n| !ready_set.contains(n))
         .collect();
 
     Ok(Json(CurrentGameResp {
         game_over,
+        player_count: user_count,
         players,
         unready_numbers: unready,
     }))
