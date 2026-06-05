@@ -1,9 +1,4 @@
-use core::num;
-use std::{
-    collections::{hash_set, HashMap, HashSet},
-    f32::consts::E,
-    sync::Arc,
-};
+use std::collections::HashMap;
 
 use axum::{
     extract::{Query, State},
@@ -11,18 +6,15 @@ use axum::{
     response::Html,
     Json,
 };
-use rand::{
-    distributions::{Distribution, WeightedIndex},
-    seq::SliceRandom,
-    Rng,
-};
-use serde_json::to_string;
-use tokio::sync::{RwLock, RwLockReadGuard};
-use tower_http::follow_redirect::policy::PolicyExt;
+use rand::Rng;
+use tokio::sync::RwLockReadGuard;
 
 use crate::models::{
     role::Role,
-    state::{AppState, NewGameResp, PollRoleReq, PollRoleResp, ReadyReq, ReadyResp},
+    state::{
+        AppState, CurrentGameResp, HistoryResp, NewGameResp, PollRoleReq, PollRoleResp, ReadyReq,
+        ReadyResp,
+    },
 };
 
 pub async fn health_handler() -> Html<&'static str> {
@@ -33,7 +25,7 @@ pub async fn health_handler() -> Html<&'static str> {
 pub async fn new_game(
     State(app_state): State<AppState>,
 ) -> Result<axum::Json<NewGameResp>, (axum::http::StatusCode, String)> {
-    let mut set = app_state.player_ready_set.write().await;
+    let _set = app_state.player_ready_set.write().await;
     let mut map = app_state.player_role_map.write().await;
     let mut unassigned_role = app_state.unassigned_role.write().await;
 
@@ -41,8 +33,8 @@ pub async fn new_game(
         unassigned_role.clear();
         unassigned_role.push(Role::Merlin);
         unassigned_role.push(Role::Percival);
-        unassigned_role.push(Role::LS_of_Arthur(1));
-        unassigned_role.push(Role::LS_of_Arthur(2));
+        unassigned_role.push(Role::LoyalServant(1));
+        unassigned_role.push(Role::LoyalServant(2));
         unassigned_role.push(Role::Morgana);
         unassigned_role.push(Role::Assassin);
         unassigned_role.push(Role::Oberon);
@@ -81,6 +73,7 @@ pub async fn player_ready(
 
     let resp = ReadyResp {
         number: query_params.number,
+        ready: true,
     };
 
     return Ok(axum::Json(resp));
@@ -137,8 +130,8 @@ pub async fn poll_player_role(
         );
         return Err(error);
     } else {
-        let roleOpt = map.get(&query_params.number);
-        if let Some(role) = roleOpt {
+        let role_opt = map.get(&query_params.number);
+        if let Some(role) = role_opt {
             //
             let resp = build_poll_role_resp(role, &app_state).await;
             return Ok(axum::Json(resp));
@@ -174,6 +167,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
                 }
             }
             PollRoleResp {
+                ready: true,
                 role: "Merlin".to_string(),
                 role_des: "你是梅林，是正义方的首领，知晓邪恶方的号码。注意，请不要暴露自己。"
                     .to_string(),
@@ -194,13 +188,15 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
                 }
             }
             PollRoleResp {
+                ready: true,
                 role: "Percival".to_string(),
                 role_des: "你是派。".to_string(),
                 skill_des: skill_des,
             }
         }
-        Role::LS_of_Arthur(_) => PollRoleResp {
-            role: "LS_of_Arthur".to_string(),
+        Role::LoyalServant(_) => PollRoleResp {
+            ready: true,
+            role: "LoyalServant".to_string(),
             role_des: "你是亚瑟的忠臣。".to_string(),
             skill_des: "".to_string(),
         },
@@ -215,6 +211,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
                 }
             }
             PollRoleResp {
+                ready: true,
                 role: "Morgana".to_string(),
                 role_des: "你是莫甘娜。".to_string(),
                 skill_des: skill_des.to_string(),
@@ -231,12 +228,14 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
                 }
             }
             PollRoleResp {
+                ready: true,
                 role: "Assassin".to_string(),
                 role_des: "你是刺客。".to_string(),
                 skill_des: skill_des.to_string(),
             }
         }
         Role::Oberon => PollRoleResp {
+            ready: true,
             role: "Oberon".to_string(),
             role_des: "你是奥伯伦".to_string(),
             skill_des: "".to_string(),
@@ -246,6 +245,19 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
     return resp;
 }
 
+#[allow(dead_code)]
 pub fn map_ok_result<T>(r: T) -> axum::Json<T> {
     axum::Json(r)
+}
+
+pub async fn admin_current_game(
+    State(_app_state): State<AppState>,
+) -> Result<Json<CurrentGameResp>, (StatusCode, String)> {
+    unimplemented!()
+}
+
+pub async fn admin_history(
+    State(_app_state): State<AppState>,
+) -> Result<Json<HistoryResp>, (StatusCode, String)> {
+    unimplemented!()
 }
