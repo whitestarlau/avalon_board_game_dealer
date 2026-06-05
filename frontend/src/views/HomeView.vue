@@ -1,9 +1,9 @@
 <script setup>
-import { ref, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import RoleCard from '../components/RoleCard.vue'
 
-const playerCount = ref(7)
-const gameStarted = ref(false)
+const playerCount = ref(0)
+const loading = ref(true)
 const selectedNumber = ref(null)
 const isReady = ref(false)
 const waiting = ref(false)
@@ -13,16 +13,18 @@ let pollTimer = null
 
 const BASE_URL = window.location.origin
 
-async function startGame() {
+async function checkGameStatus() {
   try {
-    const res = await fetch(`${BASE_URL}/api/new_game?count=${playerCount.value}`, {
-      method: 'POST',
-    })
-    if (!res.ok) return
-    gameStarted.value = true
+    const res = await fetch(`${BASE_URL}/api/admin/current_game`)
+    const data = await res.json()
+    playerCount.value = data.player_count || 0
+    if (data.game_over) {
+      gameOver.value = true
+    }
   } catch (e) {
     // ignore
   }
+  loading.value = false
 }
 
 async function ready() {
@@ -75,6 +77,10 @@ function stopPolling() {
   }
 }
 
+onMounted(() => {
+  checkGameStatus()
+})
+
 onUnmounted(() => {
   stopPolling()
 })
@@ -84,19 +90,11 @@ onUnmounted(() => {
   <div class="home">
     <h1>阿瓦隆发牌工具</h1>
 
-    <div v-if="!gameStarted" class="setup">
-      <h2>选择玩家人数</h2>
-      <div class="count-grid">
-        <button
-          v-for="n in [5, 6, 7, 8, 9, 10]"
-          :key="n"
-          :class="['count-btn', { selected: playerCount === n }]"
-          @click="playerCount = n"
-        >
-          {{ n }} 人
-        </button>
-      </div>
-      <button class="start-btn" @click="startGame">开始游戏</button>
+    <div v-if="loading" class="loading">加载中...</div>
+
+    <div v-else-if="playerCount === 0" class="waiting">
+      <h2>等待管理员开始游戏</h2>
+      <p>请管理员前往 <router-link to="/admin">管理后台</router-link> 设置玩家人数并开始游戏。</p>
     </div>
 
     <div v-else-if="!isReady" class="setup">
@@ -186,47 +184,11 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-.count-grid {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  margin: 2rem 0;
-  flex-wrap: wrap;
-}
-
-.count-btn {
-  width: 80px;
-  height: 80px;
-  font-size: 1.2rem;
-  border: 2px solid var(--color-border);
-  border-radius: 8px;
-  cursor: pointer;
-  background: var(--color-background);
+.loading {
+  text-align: center;
+  padding: 3rem;
   color: var(--color-text);
-  transition: all 0.2s;
-}
-
-.count-btn:hover {
-  border-color: var(--color-heading);
-  transform: scale(1.05);
-}
-
-.count-btn.selected {
-  border-color: #e67e22;
-  background: #e67e22;
-  color: white;
-}
-
-.start-btn {
-  display: block;
-  margin: 2rem auto;
-  padding: 1rem 3rem;
-  font-size: 1.3rem;
-  border: none;
-  border-radius: 8px;
-  background: #e67e22;
-  color: white;
-  cursor: pointer;
+  opacity: 0.6;
 }
 
 .ready-btn:disabled {

@@ -7,6 +7,7 @@ const currentGame = ref(null)
 const history = ref([])
 const loading = ref(true)
 const showCurrentGame = ref(false)
+const setupPlayerCount = ref(7)
 
 const BASE_URL = window.location.origin
 
@@ -29,17 +30,21 @@ async function fetchHistory() {
   }
 }
 
-function newGame() {
-  const count = prompt('选择玩家人数（5-10）：', currentGame.value?.player_count?.toString() || '7')
-  const num = parseInt(count)
-  if (isNaN(num) || num < 5 || num > 10) return
-  if (!confirm(`确定开始 ${num} 人新一局？`)) return
-  fetch(`${BASE_URL}/api/new_game?count=${num}`, { method: 'POST' })
-    .then(() => {
-      currentGame.value = null
-      return fetchHistory()
+async function startGame() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/new_game?count=${setupPlayerCount.value}`, {
+      method: 'POST',
     })
-    .catch(e => console.error('Failed to start new game', e))
+    if (!res.ok) return
+    await fetchCurrentGame()
+  } catch (e) {
+    console.error('Failed to start game', e)
+  }
+}
+
+function newGame() {
+  if (!confirm('确定开始新一局？当前游戏将结束。')) return
+  startGame()
 }
 
 onMounted(async () => {
@@ -55,19 +60,34 @@ onMounted(async () => {
     <div v-if="loading">加载中...</div>
 
     <template v-else>
-      <section class="current-game">
+      <section v-if="!currentGame || currentGame.player_count === 0" class="setup-game">
+        <h2>开始新游戏</h2>
+        <p>选择玩家人数：</p>
+        <div class="setup-count-grid">
+          <button
+            v-for="n in [5, 6, 7, 8, 9, 10]"
+            :key="n"
+            :class="['setup-count-btn', { selected: setupPlayerCount === n }]"
+            @click="setupPlayerCount = n"
+          >
+            {{ n }} 人
+          </button>
+        </div>
+        <button class="start-game-btn" @click="startGame">开始游戏</button>
+      </section>
+
+      <section v-else class="current-game">
         <div class="section-header">
-          <h2>当前局</h2>
+          <h2>当前局（{{ currentGame.player_count }} 人）</h2>
           <button class="toggle-btn" @click="showCurrentGame = !showCurrentGame">
             {{ showCurrentGame ? '隐藏详情' : '显示详情' }}
           </button>
         </div>
-        <div v-if="!currentGame || !currentGame.game_over" class="not-over">
-          <p v-if="currentGame">
+        <div v-if="!currentGame.game_over" class="not-over">
+          <p>
             游戏进行中，{{ currentGame.unready_numbers.length }} 名玩家未就绪：
             {{ currentGame.unready_numbers.join('、') }} 号
           </p>
-          <p v-else>无进行中的游戏</p>
         </div>
         <div v-else-if="showCurrentGame" class="game-result">
           <h3>全员就绪！</h3>
@@ -172,6 +192,60 @@ section h2 {
   gap: 1rem;
   justify-content: center;
   margin-top: 2rem;
+}
+
+.setup-game {
+  text-align: center;
+  padding: 2rem;
+  border: 2px dashed var(--color-border);
+  border-radius: 12px;
+}
+
+.setup-game h2 {
+  border: none;
+}
+
+.setup-count-grid {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  flex-wrap: wrap;
+}
+
+.setup-count-btn {
+  width: 80px;
+  height: 80px;
+  font-size: 1.2rem;
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+  cursor: pointer;
+  background: var(--color-background);
+  color: var(--color-text);
+  transition: all 0.2s;
+}
+
+.setup-count-btn:hover {
+  border-color: var(--color-heading);
+  transform: scale(1.05);
+}
+
+.setup-count-btn.selected {
+  border-color: #e67e22;
+  background: #e67e22;
+  color: white;
+}
+
+.start-game-btn {
+  display: block;
+  margin: 1.5rem auto;
+  padding: 1rem 3rem;
+  font-size: 1.2rem;
+  border: none;
+  border-radius: 8px;
+  background: #e67e22;
+  color: white;
+  cursor: pointer;
 }
 
 .new-game-btn {
