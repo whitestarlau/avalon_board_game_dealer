@@ -259,5 +259,46 @@
         "faction": "good"
       }
     ]
+  },
+  {
+    "id": 1,
+    "timestamp": "2026-06-05T18:05:52.626196+08:00",
+    "players": [
+      {
+        "number": 1,
+        "role": "刺客",
+        "faction": "evil"
+      },
+      {
+        "number": 2,
+        "role": "莫甘娜",
+        "faction": "evil"
+      },
+      {
+        "number": 3,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 4,
+        "role": "梅林",
+        "faction": "good"
+      },
+      {
+        "number": 5,
+        "role": "奥伯伦",
+        "faction": "evil"
+      },
+      {
+        "number": 6,
+        "role": "忠臣",
+        "faction": "good"
+      },
+      {
+        "number": 7,
+        "role": "派西维尔",
+        "faction": "good"
+      }
+    ]
   }
 ]

@@ -12,6 +12,7 @@ use axum::{
 };
 use once_cell::sync::Lazy;
 use rust_embed::RustEmbed;
+use std::sync::Mutex;
 use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 
@@ -26,8 +27,9 @@ use crate::{
     models::{role::Role, state::AppState},
 };
 
-static SHUTDOWN_SENDER: Lazy<tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>> =
-    Lazy::new(|| tokio::sync::Mutex::new(None));
+// Global shutdown signal: stored outside tokio runtime for JNI access
+static SHUTDOWN_SENDER: Lazy<Mutex<Option<tokio::sync::oneshot::Sender<()>>>> =
+    Lazy::new(|| Mutex::new(None));
 
 #[derive(RustEmbed)]
 #[folder = "static"]
@@ -125,40 +127,47 @@ pub fn get_local_ip() -> String {
     "127.0.0.1".to_string()
 }
 
-pub async fn start_server(port: u16) -> Result<String, String> {
-    let ip = get_local_ip();
+/// Run the server on the CURRENT thread (blocking). Returns only after shutdown.
+async fn run_server_forever(port: u16) {
     let app = build_app();
     let addr = format!("0.0.0.0:{}", port);
 
-    let listener = std::net::TcpListener::bind(&addr)
-        .map_err(|e| format!("bind failed: {}", e))?;
+    let listener = std::net::TcpListener::bind(&addr).expect("bind failed");
     listener.set_nonblocking(true).ok();
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     {
-        let mut sender = SHUTDOWN_SENDER.lock().await;
+        let mut sender = SHUTDOWN_SENDER.lock().unwrap();
         *sender = Some(tx);
     }
 
-    tokio::spawn(async move {
-        axum::Server::from_tcp(listener)
-            .unwrap()
-            .serve(app.into_make_service())
-            .with_graceful_shutdown(async {
-                rx.await.ok();
-            })
-            .await
-            .ok();
-    });
-
-    Ok(format!("http://{}:{}", ip, port))
+    axum::Server::from_tcp(listener)
+        .unwrap()
+        .serve(app.into_make_service())
+        .with_graceful_shutdown(async {
+            rx.await.ok();
+        })
+        .await
+        .ok();
 }
 
-pub async fn stop_server() {
-    let mut sender = SHUTDOWN_SENDER.lock().await;
+pub fn stop_server() {
+    let mut sender = SHUTDOWN_SENDER.lock().unwrap();
     if let Some(tx) = sender.take() {
         let _ = tx.send(());
     }
+}
+
+// ── Desktop / CLI entry ──
+
+pub fn start_server_blocking(port: u16) -> String {
+    let ip = get_local_ip();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    // Spawn the server on an extra thread so ctrl-c handler can still fire
+    std::thread::spawn(move || {
+        rt.block_on(run_server_forever(port));
+    });
+    format!("http://{}:{}", ip, port)
 }
 
 // ── JNI exports (Android only) ──
@@ -166,39 +175,26 @@ pub async fn stop_server() {
 #[cfg(target_os = "android")]
 pub mod android {
     use super::*;
-    use jni::JNIEnv;
     use jni::objects::JClass;
     use jni::sys::jint;
-    use std::sync::Mutex;
-    use once_cell::sync::Lazy;
-
-    static RUNTIME: Lazy<Mutex<Option<tokio::runtime::Runtime>>> =
-        Lazy::new(|| Mutex::new(None));
+    use jni::JNIEnv;
 
     #[no_mangle]
     pub extern "system" fn Java_com_avalon_dealer_Server_startServer(
-        _env: JNIEnv,
+        env: JNIEnv,
         _class: JClass,
         port: jint,
     ) -> jni::sys::jstring {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let result = rt.block_on(start_server(port as u16));
+        let ip = get_local_ip();
 
-        let mut runtime_guard = RUNTIME.lock().unwrap();
-        *runtime_guard = Some(rt);
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(run_server_forever(port as u16));
+        });
 
-        let output = match result {
-            Ok(url) => url,
-            Err(e) => format!("ERROR:{}", e),
-        };
-
-        // Return string via JNI
-        let env = _env;
-        let output_str = env.new_string(&output).expect("Failed to create Java string");
-        output_str.into_raw()
+        let url = format!("http://{}:{}", ip, port);
+        let output = env.new_string(&url).expect("Failed to create string");
+        output.into_raw()
     }
 
     #[no_mangle]
@@ -206,12 +202,6 @@ pub mod android {
         _env: JNIEnv,
         _class: JClass,
     ) {
-        let rt = {
-            let mut guard = RUNTIME.lock().unwrap();
-            guard.take()
-        };
-        if let Some(rt) = rt {
-            rt.block_on(stop_server());
-        }
+        stop_server();
     }
 }
