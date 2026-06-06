@@ -1,17 +1,24 @@
 <script setup>
+import { ref } from 'vue'
+
 defineProps({
   games: {
     type: Array,
     required: true
   }
 })
+
+const expandedGames = ref({})
 </script>
 
 <template>
   <div v-if="games.length === 0" class="empty">暂无游戏记录</div>
   <div v-else v-for="game in games" :key="game.id" class="game-entry">
-    <h3>第 {{ game.id }} 局 — {{ new Date(game.timestamp).toLocaleString() }}</h3>
-    <div class="player-list">
+    <div class="game-header" @click="expandedGames[game.id] = !expandedGames[game.id]">
+      <h3>第 {{ game.id }} 局 — {{ new Date(game.timestamp).toLocaleString() }}</h3>
+      <span class="expand-icon">{{ expandedGames[game.id] ? '▼' : '▶' }}</span>
+    </div>
+    <div v-if="expandedGames[game.id]" class="player-list">
       <div
         v-for="player in game.players"
         :key="player.number"
@@ -40,6 +47,23 @@ defineProps({
   padding: 1rem;
   border: 1px solid var(--color-border);
   border-radius: 8px;
+}
+
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.game-header h3 {
+  margin-bottom: 0;
+}
+
+.expand-icon {
+  font-size: 0.8rem;
+  opacity: 0.5;
 }
 
 .game-entry h3 {

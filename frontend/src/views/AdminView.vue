@@ -102,18 +102,20 @@ onMounted(async () => {
       <section v-else class="current-game">
         <div class="section-header">
           <h2>当前局（{{ currentGame.player_count }} 人）</h2>
-          <button class="toggle-btn" @click="showCurrentGame = !showCurrentGame">
-            {{ showCurrentGame ? '隐藏详情' : '显示详情' }}
-          </button>
         </div>
-        <div class="skill-info-toggle">
-          <span>技能信息：</span>
-          <button
-            :class="['toggle-btn', { active: showSkillInfo }]"
-            @click="toggleSkillInfo"
-          >
-            {{ showSkillInfo ? '展示' : '隐藏' }}
-          </button>
+        <div class="switch-row">
+          <label class="switch">
+            <input type="checkbox" :checked="showCurrentGame" @change="showCurrentGame = !showCurrentGame">
+            <span class="slider"></span>
+          </label>
+          <span>显示详情（开启后可查看各玩家角色分配）</span>
+        </div>
+        <div class="switch-row">
+          <label class="switch">
+            <input type="checkbox" :checked="showSkillInfo" @change="toggleSkillInfo">
+            <span class="slider"></span>
+          </label>
+          <span>技能信息（关闭后玩家只看到角色名，不展示技能详情，如梅林不再获知邪恶方号码）</span>
         </div>
         <div v-if="!currentGame.game_over" class="not-over">
           <p>
@@ -186,18 +188,63 @@ section h2 {
   margin: 0;
 }
 
-.toggle-btn {
-  padding: 0.4rem 1rem;
-  font-size: 0.9rem;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-background);
-  color: var(--color-text);
-  cursor: pointer;
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
-.toggle-btn:hover {
-  background: var(--color-background-mute);
+.switch-row span {
+  font-size: 0.9rem;
+  color: var(--color-text);
+  opacity: 0.85;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.3s;
+  border-radius: 20px;
+}
+
+.slider::before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 2px;
+  bottom: 2px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.switch input:checked + .slider {
+  background-color: #42b883;
+}
+
+.switch input:checked + .slider::before {
+  transform: translateX(16px);
 }
 
 .hidden-hint {
@@ -305,22 +352,5 @@ section h2 {
   color: var(--color-text);
 }
 
-.skill-info-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  padding: 0.5rem 0;
-}
 
-.skill-info-toggle span {
-  font-size: 0.95rem;
-  color: var(--color-text);
-  opacity: 0.8;
-}
-
-.toggle-btn.active {
-  border-color: #42b883;
-  color: #42b883;
-}
 </style>
