@@ -21,7 +21,8 @@ pub mod models;
 
 use crate::{
     handler::rest::{
-        admin_current_game, admin_history, health_handler, new_game, player_ready,
+        admin_current_game, admin_history, admin_skill_info_status,
+        admin_toggle_skill_info, health_handler, new_game, player_ready,
         poll_player_role,
     },
     models::{role::Role, state::AppState},
@@ -86,6 +87,7 @@ pub fn build_app() -> Router {
         Arc::new(RwLock::new(Vec::new()));
     let unassigned_role: Arc<RwLock<Vec<Role>>> = Arc::new(RwLock::new(Vec::new()));
     let game_counter: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+    let show_skill_info: Arc<RwLock<bool>> = Arc::new(RwLock::new(true));
 
     let app_state = AppState {
         user_count,
@@ -94,6 +96,7 @@ pub fn build_app() -> Router {
         history_role_map: history_player_role,
         unassigned_role,
         game_counter,
+        show_skill_info,
     };
 
     let api_routes = Router::new()
@@ -103,6 +106,8 @@ pub fn build_app() -> Router {
         .route("/new_game", post(new_game))
         .route("/admin/current_game", get(admin_current_game))
         .route("/admin/history", get(admin_history))
+        .route("/admin/skill_info_status", get(admin_skill_info_status))
+        .route("/admin/toggle_skill_info", post(admin_toggle_skill_info))
         .layer(CorsLayer::permissive())
         .with_state(app_state);
 

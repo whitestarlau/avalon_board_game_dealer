@@ -12,7 +12,7 @@ use crate::models::{
     role::Role,
     state::{
         AppState, CurrentGameResp, HistoryEntry, HistoryResp, NewGameReq, NewGameResp,
-        PlayerInfo, PollRoleReq, PollRoleResp, ReadyReq, ReadyResp,
+        PlayerInfo, PollRoleReq, PollRoleResp, ReadyReq, ReadyResp, SkillInfoStatusResp,
     },
 };
 
@@ -44,6 +44,7 @@ pub async fn new_game(
     unassigned.clear();
     unassigned.extend(Role::role_pool(count));
     *app_state.user_count.write().await = count;
+    *app_state.show_skill_info.write().await = true;
 
     *counter += 1;
 
@@ -167,6 +168,7 @@ pub async fn poll_player_role(
 
 async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
     let map = state.player_role_map.read().await;
+    let show_skill_info = *state.show_skill_info.read().await;
 
     let (role_name, skill_des) = match role {
         Role::Merlin => {
@@ -253,7 +255,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
         ready: true,
         role: role_name,
         role_des: role.description().to_string(),
-        skill_des,
+        skill_des: if show_skill_info { skill_des } else { String::new() },
     }
 }
 
@@ -348,4 +350,25 @@ pub async fn admin_history(
     };
 
     Ok(Json(HistoryResp { games }))
+}
+
+pub async fn admin_skill_info_status(
+    State(app_state): State<AppState>,
+) -> Result<Json<SkillInfoStatusResp>, (StatusCode, String)> {
+    let show = *app_state.show_skill_info.read().await;
+    Ok(Json(SkillInfoStatusResp {
+        show_skill_info: show,
+    }))
+}
+
+pub async fn admin_toggle_skill_info(
+    State(app_state): State<AppState>,
+) -> Result<Json<SkillInfoStatusResp>, (StatusCode, String)> {
+    let mut show = app_state.show_skill_info.write().await;
+    *show = !*show;
+    let new_val = *show;
+    drop(show);
+    Ok(Json(SkillInfoStatusResp {
+        show_skill_info: new_val,
+    }))
 }

@@ -18,6 +18,7 @@ pub struct AppState {
     pub history_role_map: Arc<RwLock<Vec<HashMap<i32, Role>>>>,
     #[allow(dead_code)]
     pub game_counter: Arc<RwLock<i32>>,
+    pub show_skill_info: Arc<RwLock<bool>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -79,4 +80,9 @@ pub struct HistoryEntry {
 #[derive(Serialize, Debug, Clone)]
 pub struct HistoryResp {
     pub games: Vec<HistoryEntry>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct SkillInfoStatusResp {
+    pub show_skill_info: bool,
 }

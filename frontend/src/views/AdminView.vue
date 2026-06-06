@@ -8,6 +8,7 @@ const history = ref([])
 const loading = ref(true)
 const showCurrentGame = ref(false)
 const setupPlayerCount = ref(7)
+const showSkillInfo = ref(true)
 
 const BASE_URL = window.location.origin
 
@@ -47,8 +48,30 @@ function newGame() {
   startGame()
 }
 
+async function fetchSkillInfoStatus() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/admin/skill_info_status`)
+    const data = await res.json()
+    showSkillInfo.value = data.show_skill_info
+  } catch (e) {
+    console.error('Failed to fetch skill info status', e)
+  }
+}
+
+async function toggleSkillInfo() {
+  try {
+    const res = await fetch(`${BASE_URL}/api/admin/toggle_skill_info`, {
+      method: 'POST',
+    })
+    const data = await res.json()
+    showSkillInfo.value = data.show_skill_info
+  } catch (e) {
+    console.error('Failed to toggle skill info', e)
+  }
+}
+
 onMounted(async () => {
-  await Promise.all([fetchCurrentGame(), fetchHistory()])
+  await Promise.all([fetchCurrentGame(), fetchHistory(), fetchSkillInfoStatus()])
   loading.value = false
 })
 </script>
@@ -81,6 +104,15 @@ onMounted(async () => {
           <h2>当前局（{{ currentGame.player_count }} 人）</h2>
           <button class="toggle-btn" @click="showCurrentGame = !showCurrentGame">
             {{ showCurrentGame ? '隐藏详情' : '显示详情' }}
+          </button>
+        </div>
+        <div class="skill-info-toggle">
+          <span>技能信息：</span>
+          <button
+            :class="['toggle-btn', { active: showSkillInfo }]"
+            @click="toggleSkillInfo"
+          >
+            {{ showSkillInfo ? '展示' : '隐藏' }}
           </button>
         </div>
         <div v-if="!currentGame.game_over" class="not-over">
@@ -271,5 +303,24 @@ section h2 {
   border-radius: 8px;
   text-decoration: none;
   color: var(--color-text);
+}
+
+.skill-info-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+}
+
+.skill-info-toggle span {
+  font-size: 0.95rem;
+  color: var(--color-text);
+  opacity: 0.8;
+}
+
+.toggle-btn.active {
+  border-color: #42b883;
+  color: #42b883;
 }
 </style>
