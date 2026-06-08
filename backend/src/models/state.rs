@@ -10,16 +10,19 @@ use super::role::Role;
 
 #[derive(Clone, Debug)]
 pub struct AppState {
-    pub user_count: Arc<RwLock<usize>>,
-    pub player_role_map: Arc<RwLock<HashMap<i32, Role>>>,
-    pub player_ready_set: Arc<RwLock<HashSet<i32>>>,
-    pub unassigned_role: Arc<RwLock<Vec<Role>>>,
-    #[allow(dead_code)]
-    pub history_role_map: Arc<RwLock<Vec<HashMap<i32, Role>>>>,
-    #[allow(dead_code)]
-    pub game_counter: Arc<RwLock<i32>>,
-    pub show_skill_info: Arc<RwLock<bool>>,
+    pub inner: Arc<RwLock<GameState>>,
     pub game_complete_tx: Arc<watch::Sender<()>>,
+}
+
+#[derive(Debug)]
+pub struct GameState {
+    pub user_count: usize,
+    pub player_role_map: HashMap<i32, Role>,
+    pub player_ready_set: HashSet<i32>,
+    pub unassigned_role: Vec<Role>,
+    pub history_role_map: Vec<HashMap<i32, Role>>,
+    pub game_counter: i32,
+    pub show_skill_info: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

@@ -25,7 +25,7 @@ use crate::{
         admin_toggle_skill_info, health_handler, new_game, player_ready,
         poll_player_role, sse_handler,
     },
-    models::{role::Role, state::AppState},
+    models::state::{AppState, GameState},
 };
 
 // Global shutdown signal: stored outside tokio runtime for JNI access
@@ -80,26 +80,19 @@ async fn serve_embedded(req: Request<Body>) -> impl IntoResponse {
 }
 
 pub fn build_app() -> Router {
-    let user_count: Arc<RwLock<usize>> = Arc::new(RwLock::new(0));
-    let play_role_map: Arc<RwLock<HashMap<i32, Role>>> = Arc::new(RwLock::new(HashMap::new()));
-    let ready_player_set: Arc<RwLock<HashSet<i32>>> = Arc::new(RwLock::new(HashSet::new()));
-    let history_player_role: Arc<RwLock<Vec<HashMap<i32, Role>>>> =
-        Arc::new(RwLock::new(Vec::new()));
-    let unassigned_role: Arc<RwLock<Vec<Role>>> = Arc::new(RwLock::new(Vec::new()));
-    let game_counter: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
-    let show_skill_info: Arc<RwLock<bool>> = Arc::new(RwLock::new(true));
+    let game_state = GameState {
+        user_count: 0,
+        player_role_map: HashMap::new(),
+        player_ready_set: HashSet::new(),
+        unassigned_role: Vec::new(),
+        history_role_map: Vec::new(),
+        game_counter: 0,
+        show_skill_info: true,
+    };
     let (game_complete_tx, _) = watch::channel(());
-    let game_complete_tx = Arc::new(game_complete_tx);
-
     let app_state = AppState {
-        user_count,
-        player_role_map: play_role_map,
-        player_ready_set: ready_player_set,
-        history_role_map: history_player_role,
-        unassigned_role,
-        game_counter,
-        show_skill_info,
-        game_complete_tx,
+        inner: Arc::new(RwLock::new(game_state)),
+        game_complete_tx: Arc::new(game_complete_tx),
     };
 
     let api_routes = Router::new()

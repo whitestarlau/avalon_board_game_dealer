@@ -14,8 +14,9 @@ use rand::Rng;
 use crate::models::{
     role::Role,
     state::{
-        AppState, CurrentGameResp, HistoryEntry, HistoryResp, NewGameReq, NewGameResp,
-        PlayerInfo, PollRoleReq, PollRoleResp, ReadyReq, ReadyResp, SkillInfoStatusResp,
+        AppState, CurrentGameResp, GameState, HistoryEntry, HistoryResp, NewGameReq,
+        NewGameResp, PlayerInfo, PollRoleReq, PollRoleResp, ReadyReq, ReadyResp,
+        SkillInfoStatusResp,
     },
 };
 
@@ -28,28 +29,24 @@ pub async fn new_game(
     State(app_state): State<AppState>,
     Query(query_params): Query<NewGameReq>,
 ) -> Result<Json<NewGameResp>, (StatusCode, String)> {
-    let mut ready_set = app_state.player_ready_set.write().await;
-    let mut role_map = app_state.player_role_map.write().await;
-    let mut unassigned = app_state.unassigned_role.write().await;
-    let mut history = app_state.history_role_map.write().await;
-    let mut counter = app_state.game_counter.write().await;
+    let mut state = app_state.inner.write().await;
 
     // Save current game to history if any players have roles
-    if !role_map.is_empty() {
-        history.push(role_map.clone());
+    if !state.player_role_map.is_empty() {
+        let snapshot = state.player_role_map.clone();
+        state.history_role_map.push(snapshot);
     }
 
     let count = query_params.count.max(5).min(10);
 
     // Reset state
-    ready_set.clear();
-    role_map.clear();
-    unassigned.clear();
-    unassigned.extend(Role::role_pool(count));
-    *app_state.user_count.write().await = count;
-    *app_state.show_skill_info.write().await = true;
-
-    *counter += 1;
+    state.player_ready_set.clear();
+    state.player_role_map.clear();
+    state.unassigned_role.clear();
+    state.unassigned_role.extend(Role::role_pool(count));
+    state.user_count = count;
+    state.show_skill_info = true;
+    state.game_counter += 1;
 
     Ok(Json(NewGameResp {
         des: format!("new game with {} players", count),
@@ -62,59 +59,47 @@ pub async fn player_ready(
 ) -> Result<Json<ReadyResp>, (StatusCode, String)> {
     let number = query_params.number;
 
-    let user_count = *app_state.user_count.read().await;
-    if user_count == 0 {
+    let mut state = app_state.inner.write().await;
+
+    if state.user_count == 0 {
         return Err((
             StatusCode::BAD_REQUEST,
             "game not started, create a new game first".to_string(),
         ));
     }
 
-    if number < 1 || number > user_count as i32 {
+    if number < 1 || number > state.user_count as i32 {
         return Err((
             StatusCode::BAD_REQUEST,
-            format!("number must be between 1 and {}", user_count),
+            format!("number must be between 1 and {}", state.user_count),
         ));
     }
 
-    let ready_set = app_state.player_ready_set.read().await;
-    if ready_set.contains(&number) {
+    if state.player_ready_set.contains(&number) {
         return Err((
             StatusCode::BAD_REQUEST,
             format!("player {} already ready", number),
         ));
     }
-    drop(ready_set);
 
-    // Check if game is already over
-    {
-        let map = app_state.player_role_map.read().await;
-        if map.len() >= user_count {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "game already over, start a new game".to_string(),
-            ));
-        }
+    if state.player_role_map.len() >= state.user_count {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "game already over, start a new game".to_string(),
+        ));
     }
 
-    // Mark as ready
-    {
-        let mut set = app_state.player_ready_set.write().await;
-        set.insert(number);
-    }
-
-    gen_player_role(number, &app_state).await
+    state.player_ready_set.insert(number);
+    gen_player_role(number, &mut state)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    // Check if all players are ready — if so, auto-save to history and notify SSE
-    {
-        let map = app_state.player_role_map.read().await;
-        if map.len() == *app_state.user_count.read().await {
-            let counter = *app_state.game_counter.read().await;
-            let history = app_state.history_role_map.read().await;
-            save_game_to_history(&map, counter, &history).await;
-            let _ = app_state.game_complete_tx.send(());
-        }
+    let game_complete = state.player_role_map.len() == state.user_count;
+    if game_complete {
+        let role_map = state.player_role_map.clone();
+        let counter = state.game_counter;
+        drop(state);
+        save_game_to_history(&role_map, counter, &Vec::new()).await;
+        let _ = app_state.game_complete_tx.send(());
     }
 
     Ok(Json(ReadyResp {
@@ -123,25 +108,22 @@ pub async fn player_ready(
     }))
 }
 
-async fn gen_player_role(num: i32, app_state: &AppState) -> Result<i32, String> {
-    let mut map = app_state.player_role_map.write().await;
-    let mut unassigned_role = app_state.unassigned_role.write().await;
-    let history = app_state.history_role_map.read().await;
-
-    if unassigned_role.is_empty() {
+fn gen_player_role(num: i32, state: &mut GameState) -> Result<i32, String> {
+    if state.unassigned_role.is_empty() {
         return Err("no roles left to assign".to_string());
     }
 
     // Check if player had a role in the last game for future weighted selection
-    let _last_faction: Option<&str> = history
+    let _last_faction: Option<&str> = state
+        .history_role_map
         .last()
         .and_then(|last_map| last_map.get(&num))
         .map(|r| r.faction());
 
     let mut rng = rand::thread_rng();
-    let index = rng.gen_range(0..unassigned_role.len());
-    let role = unassigned_role.remove(index);
-    map.insert(num, role.clone());
+    let index = rng.gen_range(0..state.unassigned_role.len());
+    let role = state.unassigned_role.remove(index);
+    state.player_role_map.insert(num, role.clone());
 
     Ok(0)
 }
@@ -150,11 +132,9 @@ pub async fn poll_player_role(
     State(app_state): State<AppState>,
     Query(query_params): Query<PollRoleReq>,
 ) -> Result<Json<PollRoleResp>, (StatusCode, String)> {
-    let user_count = *app_state.user_count.read().await;
-    let map = app_state.player_role_map.read().await;
-    let ready_size = map.len();
+    let state = app_state.inner.read().await;
 
-    if ready_size < user_count {
+    if state.player_role_map.len() < state.user_count {
         return Ok(Json(PollRoleResp {
             ready: false,
             role: String::new(),
@@ -163,21 +143,18 @@ pub async fn poll_player_role(
         }));
     }
 
-    let role = map.get(&query_params.number)
+    let role = state.player_role_map.get(&query_params.number)
         .ok_or_else(|| (StatusCode::BAD_REQUEST, "player not found".to_string()))?;
 
-    let resp = build_poll_role_resp(role, &app_state).await;
+    let resp = build_poll_role_resp(role, &state.player_role_map, state.show_skill_info);
     Ok(Json(resp))
 }
 
-async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
-    let map = state.player_role_map.read().await;
-    let show_skill_info = *state.show_skill_info.read().await;
-
+fn build_poll_role_resp(role: &Role, role_map: &HashMap<i32, Role>, show_skill_info: bool) -> PollRoleResp {
     let (role_name, skill_des) = match role {
         Role::Merlin => {
             let mut des = "邪恶方玩家有： ".to_string();
-            for (num, p_role) in map.iter() {
+            for (num, p_role) in role_map.iter() {
                 match p_role {
                     Role::Morgana | Role::Assassin | Role::Oberon | Role::MinionOfMordred(_) => {
                         des = format!("{} {}号", des, num);
@@ -189,7 +166,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
         }
         Role::Percival => {
             let mut des = "梅林和莫甘娜是：".to_string();
-            for (num, p_role) in map.iter() {
+            for (num, p_role) in role_map.iter() {
                 match p_role {
                     Role::Morgana | Role::Merlin => {
                         des = format!("{} {}号", des, num);
@@ -204,7 +181,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
         }
         Role::Morgana => {
             let mut des = "邪恶同伴是：".to_string();
-            for (num, p_role) in map.iter() {
+            for (num, p_role) in role_map.iter() {
                 match p_role {
                     Role::Assassin | Role::Mordred | Role::MinionOfMordred(_) => {
                         des = format!("{} {}号", des, num);
@@ -216,7 +193,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
         }
         Role::Assassin => {
             let mut des = "邪恶同伴是：".to_string();
-            for (num, p_role) in map.iter() {
+            for (num, p_role) in role_map.iter() {
                 match p_role {
                     Role::Morgana | Role::Mordred | Role::MinionOfMordred(_) => {
                         des = format!("{} {}号", des, num);
@@ -231,7 +208,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
         }
         Role::Mordred => {
             let mut des = "邪恶同伴是：".to_string();
-            for (num, p_role) in map.iter() {
+            for (num, p_role) in role_map.iter() {
                 match p_role {
                     Role::Morgana | Role::Assassin | Role::MinionOfMordred(_) => {
                         des = format!("{} {}号", des, num);
@@ -243,7 +220,7 @@ async fn build_poll_role_resp(role: &Role, state: &AppState) -> PollRoleResp {
         }
         Role::MinionOfMordred(_) => {
             let mut des = "邪恶同伴是：".to_string();
-            for (num, p_role) in map.iter() {
+            for (num, p_role) in role_map.iter() {
                 match p_role {
                     Role::Morgana | Role::Assassin | Role::Mordred => {
                         des = format!("{} {}号", des, num);
@@ -308,18 +285,16 @@ async fn save_game_to_history(
 pub async fn admin_current_game(
     State(app_state): State<AppState>,
 ) -> Result<Json<CurrentGameResp>, (StatusCode, String)> {
-    let user_count = *app_state.user_count.read().await;
-    let map = app_state.player_role_map.read().await;
-    let ready_set = app_state.player_ready_set.read().await;
+    let state = app_state.inner.read().await;
 
-    let game_over = map.len() == user_count;
+    let game_over = state.player_role_map.len() == state.user_count;
 
     let mut players: Vec<PlayerInfo> = Vec::new();
-    let mut sorted_numbers: Vec<i32> = map.keys().cloned().collect();
+    let mut sorted_numbers: Vec<i32> = state.player_role_map.keys().cloned().collect();
     sorted_numbers.sort();
 
     for num in sorted_numbers {
-        let role = &map[&num];
+        let role = &state.player_role_map[&num];
         players.push(PlayerInfo {
             number: num,
             role: role.name_cn().to_string(),
@@ -327,14 +302,14 @@ pub async fn admin_current_game(
         });
     }
 
-    let all_numbers: Vec<i32> = (1..=user_count as i32).collect();
+    let all_numbers: Vec<i32> = (1..=state.user_count as i32).collect();
     let unready: Vec<i32> = all_numbers.into_iter()
-        .filter(|n| !ready_set.contains(n))
+        .filter(|n| !state.player_ready_set.contains(n))
         .collect();
 
     Ok(Json(CurrentGameResp {
         game_over,
-        player_count: user_count,
+        player_count: state.user_count,
         players,
         unready_numbers: unready,
     }))
@@ -359,21 +334,19 @@ pub async fn admin_history(
 pub async fn admin_skill_info_status(
     State(app_state): State<AppState>,
 ) -> Result<Json<SkillInfoStatusResp>, (StatusCode, String)> {
-    let show = *app_state.show_skill_info.read().await;
+    let state = app_state.inner.read().await;
     Ok(Json(SkillInfoStatusResp {
-        show_skill_info: show,
+        show_skill_info: state.show_skill_info,
     }))
 }
 
 pub async fn admin_toggle_skill_info(
     State(app_state): State<AppState>,
 ) -> Result<Json<SkillInfoStatusResp>, (StatusCode, String)> {
-    let mut show = app_state.show_skill_info.write().await;
-    *show = !*show;
-    let new_val = *show;
-    drop(show);
+    let mut state = app_state.inner.write().await;
+    state.show_skill_info = !state.show_skill_info;
     Ok(Json(SkillInfoStatusResp {
-        show_skill_info: new_val,
+        show_skill_info: state.show_skill_info,
     }))
 }
 
@@ -388,17 +361,15 @@ pub async fn sse_handler(
     let stream = stream::once(async move {
         loop {
             let is_complete = {
-                let map = state.player_role_map.read().await;
-                let user_count = *state.user_count.read().await;
-                map.len() >= user_count && map.contains_key(&number)
+                let inner = state.inner.read().await;
+                inner.player_role_map.len() >= inner.user_count
+                    && inner.player_role_map.contains_key(&number)
             };
 
             if is_complete {
-                let resp = {
-                    let map = state.player_role_map.read().await;
-                    let role = map.get(&number).unwrap();
-                    build_poll_role_resp(role, &state).await
-                };
+                let inner = state.inner.read().await;
+                let role = inner.player_role_map.get(&number).unwrap();
+                let resp = build_poll_role_resp(role, &inner.player_role_map, inner.show_skill_info);
                 return Ok(Event::default().data(serde_json::to_string(&resp).unwrap()));
             }
 
