@@ -36,9 +36,9 @@ async function ready() {
       method: 'GET',
     })
     if (!res.ok) {
-      const text = await res.text()
+      const data = await res.json()
       waiting.value = false
-      if (text.includes('already ready') || text.includes('game already over')) {
+      if (data.error === 'ALREADY_READY' || data.error === 'GAME_ALREADY_OVER') {
         isReady.value = true
         startPolling()
         return

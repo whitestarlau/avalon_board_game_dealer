@@ -4,12 +4,13 @@ use std::convert::Infallible;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    response::Html,
+    response::{Html, IntoResponse, Response},
     response::sse::{Event, Sse},
     Json,
 };
 use futures::stream::{self, Stream};
 use rand::Rng;
+use serde::Serialize;
 
 use crate::models::{
     role::Role,
@@ -20,6 +21,18 @@ use crate::models::{
     },
 };
 
+#[derive(Serialize, Debug)]
+pub struct AppError {
+    pub error: String,
+    pub message: String,
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        (StatusCode::BAD_REQUEST, Json(self)).into_response()
+    }
+}
+
 pub async fn health_handler() -> Html<&'static str> {
     println!("some one call health check api.");
     Html("<h1>Goods server health ok.</h1>")
@@ -28,7 +41,7 @@ pub async fn health_handler() -> Html<&'static str> {
 pub async fn new_game(
     State(app_state): State<AppState>,
     Query(query_params): Query<NewGameReq>,
-) -> Result<Json<NewGameResp>, (StatusCode, String)> {
+) -> Result<Json<NewGameResp>, AppError> {
     let mut state = app_state.inner.write().await;
 
     // Save current game to history if any players have roles
@@ -56,42 +69,42 @@ pub async fn new_game(
 pub async fn player_ready(
     State(app_state): State<AppState>,
     Query(query_params): Query<ReadyReq>,
-) -> Result<Json<ReadyResp>, (StatusCode, String)> {
+) -> Result<Json<ReadyResp>, AppError> {
     let number = query_params.number;
 
     let mut state = app_state.inner.write().await;
 
     if state.user_count == 0 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "game not started, create a new game first".to_string(),
-        ));
+        return Err(AppError {
+            error: "GAME_NOT_STARTED".into(),
+            message: "game not started, create a new game first".into(),
+        });
     }
 
     if number < 1 || number > state.user_count as i32 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("number must be between 1 and {}", state.user_count),
-        ));
+        return Err(AppError {
+            error: "INVALID_PLAYER_NUMBER".into(),
+            message: format!("number must be between 1 and {}", state.user_count),
+        });
     }
 
     if state.player_ready_set.contains(&number) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            format!("player {} already ready", number),
-        ));
+        return Err(AppError {
+            error: "ALREADY_READY".into(),
+            message: format!("player {} already ready", number),
+        });
     }
 
     if state.player_role_map.len() >= state.user_count {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "game already over, start a new game".to_string(),
-        ));
+        return Err(AppError {
+            error: "GAME_ALREADY_OVER".into(),
+            message: "game already over, start a new game".into(),
+        });
     }
 
     state.player_ready_set.insert(number);
     gen_player_role(number, &mut state)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+        .map_err(|e| AppError { error: "NO_ROLES_LEFT".into(), message: e })?;
 
     let game_complete = state.player_role_map.len() == state.user_count;
     if game_complete {
@@ -131,7 +144,7 @@ fn gen_player_role(num: i32, state: &mut GameState) -> Result<i32, String> {
 pub async fn poll_player_role(
     State(app_state): State<AppState>,
     Query(query_params): Query<PollRoleReq>,
-) -> Result<Json<PollRoleResp>, (StatusCode, String)> {
+) -> Result<Json<PollRoleResp>, AppError> {
     let state = app_state.inner.read().await;
 
     if state.player_role_map.len() < state.user_count {
@@ -144,7 +157,7 @@ pub async fn poll_player_role(
     }
 
     let role = state.player_role_map.get(&query_params.number)
-        .ok_or_else(|| (StatusCode::BAD_REQUEST, "player not found".to_string()))?;
+        .ok_or_else(|| AppError { error: "PLAYER_NOT_FOUND".into(), message: "player not found".into() })?;
 
     let resp = build_poll_role_resp(role, &state.player_role_map, state.show_skill_info);
     Ok(Json(resp))
@@ -284,7 +297,7 @@ async fn save_game_to_history(
 
 pub async fn admin_current_game(
     State(app_state): State<AppState>,
-) -> Result<Json<CurrentGameResp>, (StatusCode, String)> {
+) -> Result<Json<CurrentGameResp>, AppError> {
     let state = app_state.inner.read().await;
 
     let game_over = state.player_role_map.len() == state.user_count;
@@ -317,7 +330,7 @@ pub async fn admin_current_game(
 
 pub async fn admin_history(
     State(_app_state): State<AppState>,
-) -> Result<Json<HistoryResp>, (StatusCode, String)> {
+) -> Result<Json<HistoryResp>, AppError> {
     let path = std::path::Path::new("game_history.json");
     let games: Vec<HistoryEntry> = if path.exists() {
         std::fs::read_to_string(path)
@@ -333,7 +346,7 @@ pub async fn admin_history(
 
 pub async fn admin_skill_info_status(
     State(app_state): State<AppState>,
-) -> Result<Json<SkillInfoStatusResp>, (StatusCode, String)> {
+) -> Result<Json<SkillInfoStatusResp>, AppError> {
     let state = app_state.inner.read().await;
     Ok(Json(SkillInfoStatusResp {
         show_skill_info: state.show_skill_info,
@@ -342,7 +355,7 @@ pub async fn admin_skill_info_status(
 
 pub async fn admin_toggle_skill_info(
     State(app_state): State<AppState>,
-) -> Result<Json<SkillInfoStatusResp>, (StatusCode, String)> {
+) -> Result<Json<SkillInfoStatusResp>, AppError> {
     let mut state = app_state.inner.write().await;
     state.show_skill_info = !state.show_skill_info;
     Ok(Json(SkillInfoStatusResp {
