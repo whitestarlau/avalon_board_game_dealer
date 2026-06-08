@@ -13,7 +13,7 @@ use axum::{
 use once_cell::sync::Lazy;
 use rust_embed::RustEmbed;
 use std::sync::Mutex;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 use tower_http::cors::CorsLayer;
 
 pub mod handler;
@@ -23,7 +23,7 @@ use crate::{
     handler::rest::{
         admin_current_game, admin_history, admin_skill_info_status,
         admin_toggle_skill_info, health_handler, new_game, player_ready,
-        poll_player_role,
+        poll_player_role, sse_handler,
     },
     models::{role::Role, state::AppState},
 };
@@ -88,6 +88,8 @@ pub fn build_app() -> Router {
     let unassigned_role: Arc<RwLock<Vec<Role>>> = Arc::new(RwLock::new(Vec::new()));
     let game_counter: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
     let show_skill_info: Arc<RwLock<bool>> = Arc::new(RwLock::new(true));
+    let (game_complete_tx, _) = watch::channel(());
+    let game_complete_tx = Arc::new(game_complete_tx);
 
     let app_state = AppState {
         user_count,
@@ -97,11 +99,13 @@ pub fn build_app() -> Router {
         unassigned_role,
         game_counter,
         show_skill_info,
+        game_complete_tx,
     };
 
     let api_routes = Router::new()
         .route("/health_check", get(health_handler))
         .route("/ready", get(player_ready))
+        .route("/sse", get(sse_handler))
         .route("/poll_player_role", post(poll_player_role))
         .route("/new_game", post(new_game))
         .route("/admin/current_game", get(admin_current_game))

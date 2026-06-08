@@ -1,11 +1,14 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 
 use axum::{
     extract::{Query, State},
     http::StatusCode,
     response::Html,
+    response::sse::{Event, Sse},
     Json,
 };
+use futures::stream::{self, Stream};
 use rand::Rng;
 
 use crate::models::{
@@ -103,13 +106,14 @@ pub async fn player_ready(
     gen_player_role(number, &app_state).await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
-    // Check if all players are ready — if so, auto-save to history
+    // Check if all players are ready — if so, auto-save to history and notify SSE
     {
         let map = app_state.player_role_map.read().await;
         if map.len() == *app_state.user_count.read().await {
             let counter = *app_state.game_counter.read().await;
             let history = app_state.history_role_map.read().await;
             save_game_to_history(&map, counter, &history).await;
+            let _ = app_state.game_complete_tx.send(());
         }
     }
 
@@ -371,4 +375,36 @@ pub async fn admin_toggle_skill_info(
     Ok(Json(SkillInfoStatusResp {
         show_skill_info: new_val,
     }))
+}
+
+pub async fn sse_handler(
+    State(app_state): State<AppState>,
+    Query(query_params): Query<PollRoleReq>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let number = query_params.number;
+    let state = app_state.clone();
+    let mut game_rx = state.game_complete_tx.subscribe();
+
+    let stream = stream::once(async move {
+        loop {
+            let is_complete = {
+                let map = state.player_role_map.read().await;
+                let user_count = *state.user_count.read().await;
+                map.len() >= user_count && map.contains_key(&number)
+            };
+
+            if is_complete {
+                let resp = {
+                    let map = state.player_role_map.read().await;
+                    let role = map.get(&number).unwrap();
+                    build_poll_role_resp(role, &state).await
+                };
+                return Ok(Event::default().data(serde_json::to_string(&resp).unwrap()));
+            }
+
+            let _ = game_rx.changed().await;
+        }
+    });
+
+    Sse::new(stream)
 }

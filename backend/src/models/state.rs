@@ -4,7 +4,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 
 use super::role::Role;
 
@@ -19,6 +19,7 @@ pub struct AppState {
     #[allow(dead_code)]
     pub game_counter: Arc<RwLock<i32>>,
     pub show_skill_info: Arc<RwLock<bool>>,
+    pub game_complete_tx: Arc<watch::Sender<()>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

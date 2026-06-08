@@ -9,7 +9,7 @@ const isReady = ref(false)
 const waiting = ref(false)
 const gameOver = ref(false)
 const roleData = ref(null)
-let pollTimer = null
+let eventSource = null
 
 const BASE_URL = window.location.origin
 
@@ -53,27 +53,25 @@ async function ready() {
 }
 
 function startPolling() {
-  pollTimer = setInterval(async () => {
-    try {
-      const res = await fetch(`${BASE_URL}/api/poll_player_role?number=${selectedNumber.value}`, {
-        method: 'POST',
-      })
-      const data = await res.json()
-      if (data.ready) {
-        gameOver.value = true
-        roleData.value = data
-        stopPolling()
-      }
-    } catch (e) {
-      // ignore polling errors
+  const es = new EventSource(`${BASE_URL}/api/sse?number=${selectedNumber.value}`)
+  es.onmessage = (event) => {
+    const data = JSON.parse(event.data)
+    if (data.ready) {
+      gameOver.value = true
+      roleData.value = data
+      es.close()
     }
-  }, 3000)
+  }
+  es.onerror = () => {
+    // EventSource auto-reconnects on failure
+  }
+  eventSource = es
 }
 
 function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
   }
 }
 
